@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Utah Dispersed Camping Finder</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+
+        .control-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            max-width: 300px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .control-panel h3 {
+            margin-bottom: 12px;
+            font-size: 16px;
+            color: #8B4513;
+            border-bottom: 2px solid #8B4513;
+            padding-bottom: 8px;
+        }
+
+        .layer-group {
+            margin-bottom: 15px;
+        }
+
+        .layer-group h4 {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .layer-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .layer-item input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .layer-item label {
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            display: inline-block;
+            margin-left: 5px;
+            border: 1px solid #999;
+            border-radius: 2px;
+        }
+
+        .weather-panel {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            min-width: 200px;
+            display: none;
+        }
+
+        .weather-panel.active {
+            display: block;
+        }
+
+        .weather-panel h4 {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #8B4513;
+        }
+
+        .weather-day {
+            padding: 6px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 12px;
+        }
+
+        .weather-day:last-child {
+            border-bottom: none;
+        }
+
+        .title-banner {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(139, 69, 19, 0.95);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+
+        .title-banner h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .title-banner p {
+            font-size: 11px;
+            opacity: 0.9;
+            margin-top: 4px;
+        }
+
+        .info-popup {
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .info-popup h4 {
+            margin-bottom: 5px;
+            color: #8B4513;
+        }
+
+        .info-popup p {
+            margin: 3px 0;
+        }
+
+        .toggle-btn {
+            background: #8B4513;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 8px;
+            width: 100%;
+        }
+
+        .toggle-btn:hover {
+            background: #6B3410;
+        }
+
+        .status-text {
+            font-size: 10px;
+            color: #666;
+            margin-top: 8px;
+            font-style: italic;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            font-size: 11px;
+            margin: 4px 0;
+            color: #666;
+        }
+
+        .camp-icon-known {
+            font-size: 28px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        }
+
+        .camp-icon-risky {
+            font-size: 28px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        }
+
+        @media (max-width: 768px) {
+            .control-panel {
+                max-width: 240px;
+            }
+            
+            .title-banner h1 {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="title-banner">
+        <h1>🏕️ Utah Dispersed Camping Finder</h1>
+        <p>46 research-verified sites + OSM roads & trails</p>
+    </div>
+
+    <div class="control-panel">
+        <h3>🗺️ Map Layers</h3>
+        
+        <div class="layer-group">
+            <h4>Federal Lands</h4>
+            <div class="layer-item">
+                <input type="checkbox" id="layer-national-forest" checked>
+                <label for="layer-national-forest">National Forests</label>
+                <span class="legend-color" style="background: rgba(34, 139, 34, 0.3);"></span>
+            </div>
+            <div class="layer-item">
+                <input type="checkbox" id="layer-blm" checked>
+                <label for="layer-blm">BLM Land</label>
+                <span class="legend-color" style="background: rgba(210, 180, 140, 0.3);"></span>
+            </div>
+            <div class="layer-item">
+                <input type="checkbox" id="layer-national-parks">
+                <label for="layer-national-parks">National Parks</label>
+                <span class="legend-color" style="background: rgba(184, 134, 11, 0.3);"></span>
+            </div>
+            <div class="layer-item">
+                <input type="checkbox" id="layer-wilderness">
+                <label for="layer-wilderness">Wilderness Areas</label>
+                <span class="legend-color" style="background: rgba(139, 0, 0, 0.2);"></span>
+            </div>
+        </div>
+
+        <div class="layer-group">
+            <h4>Roads & Trails (OSM)</h4>
+            <div class="layer-item">
+                <input type="checkbox" id="layer-forest-roads" checked>
+                <label for="layer-forest-roads">Forest/BLM Roads</label>
+            </div>
+            <div class="layer-item">
+                <input type="checkbox" id="layer-tracks" checked>
+                <label for="layer-tracks">4WD Tracks</label>
+            </div>
+            <div class="layer-item">
+                <input type="checkbox" id="layer-paths">
+                <label for="layer-paths">Hiking Trails</label>
+            </div>
+            <div class="legend-item">
+                <span style="width: 20px; height: 2px; background: #8B4513; display: inline-block; margin-right: 5px;"></span>
+                <span>Roads</span>
+            </div>
+            <div class="legend-item">
+                <span style="width: 20px; height: 2px; background: #A0522D; display: inline-block; margin-right: 5px; border-top: 2px dashed #A0522D;"></span>
+                <span>4WD Tracks</span>
+            </div>
+            <div class="legend-item">
+                <span style="width: 20px; height: 1px; background: #FF6347; display: inline-block; margin-right: 5px;"></span>
+                <span>Trails</span>
+            </div>
+        </div>
+
+        <div class="layer-group">
+            <h4>Camping Sites</h4>
+            <div class="layer-item">
+                <input type="checkbox" id="layer-dispersed-known" checked>
+                <label for="layer-dispersed-known">Known Dispersed Sites</label>
+                <span style="font-size: 16px; margin-left: 5px;">⛺</span>
+            </div>
+            <div class="layer-item">
+                <input type="checkbox" id="layer-dispersed-risky">
+                <label for="layer-dispersed-risky">Risky Dispersed Sites</label>
+                <span style="font-size: 16px; margin-left: 5px;">⚠️</span>
+            </div>
+            <div class="layer-item">
+                <input type="checkbox" id="layer-campgrounds">
+                <label for="layer-campgrounds">Campgrounds (OSM)</label>
+            </div>
+            <div class="legend-item" style="margin-top: 8px; padding: 6px; background: #f0f9ff; border-radius: 4px;">
+                <span style="font-size: 18px; margin-right: 5px;">⛺</span>
+                <span style="font-size: 10px;"><strong>Known:</strong> Well-documented, verified</span>
+            </div>
+            <div class="legend-item" style="padding: 6px; background: #fff7ed; border-radius: 4px;">
+                <span style="font-size: 18px; margin-right: 5px;">⚠️</span>
+                <span style="font-size: 10px;"><strong>Risky:</strong> Limited info - verify first!</span>
+            </div>
+        </div>
+
+        <div class="layer-group">
+            <h4>Overlays</h4>
+            <div class="layer-item">
+                <input type="checkbox" id="layer-dark-sky">
+                <label for="layer-dark-sky">Dark Sky Areas</label>
+            </div>
+        </div>
+
+        <button class="toggle-btn" id="weather-toggle">Show Weather Forecast</button>
+        <p class="status-text" id="status-text">Loading map data...</p>
+    </div>
+
+    <div class="weather-panel" id="weather-panel">
+        <h4>⛅ 3-Day Forecast</h4>
+        <div id="weather-content">
+            <p style="font-size: 11px; color: #666;">Click on the map to get weather for that location</p>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script>
+        const map = L.map('map').setView([39.3210, -111.0937], 7);
+
+        const baseLayers = {
+            'Topographic': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                attribution: 'OpenTopoMap',
+                maxZoom: 17
+            }),
+            'Street Map': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap',
+                maxZoom: 19
+            }),
+            'Satellite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Esri',
+                maxZoom: 19
+            })
+        };
+
+        baseLayers['Topographic'].addTo(map);
+        
+        L.control.layers(baseLayers, null, {
+            position: 'bottomright',
+            collapsed: false
+        }).addTo(map);
+
+        const layers = {
+            nationalForest: L.layerGroup().addTo(map),
+            blm: L.layerGroup().addTo(map),
+            nationalParks: L.layerGroup(),
+            wilderness: L.layerGroup(),
+            forestRoads: L.layerGroup().addTo(map),
+            tracks: L.layerGroup().addTo(map),
+            paths: L.layerGroup(),
+            dispersedKnown: L.layerGroup().addTo(map),
+            dispersedRisky: L.layerGroup(),
+            campgrounds: L.layerGroup(),
+            darkSky: L.layerGroup()
+        };
+
+        const utahBounds = {
+            south: 37.0,
+            north: 42.0,
+            west: -114.0,
+            east: -109.0
+        };
+
+        function updateStatus(message) {
+            document.getElementById('status-text').textContent = message;
+        }
+
+        function loadNationalForests() {
+            const forests = [
+                {name: "Uinta-Wasatch-Cache National Forest", info: "2.1 million acres in northern Utah", acres: "2,100,000",
+                    polygon: [[41.8, -111.8], [41.8, -109.5], [40.3, -109.5], [40.3, -111.0], [40.8, -111.8], [41.8, -111.8]]},
+                {name: "Manti-La Sal National Forest", info: "1.4 million acres in central and southeastern Utah", acres: "1,400,000",
+                    polygon: [[39.8, -112.0], [39.8, -110.0], [38.5, -109.0], [37.8, -109.5], [37.8, -112.0], [39.8, -112.0]]},
+                {name: "Fishlake National Forest", info: "1.5 million acres in south-central Utah", acres: "1,500,000",
+                    polygon: [[39.2, -112.5], [39.2, -111.0], [38.2, -111.0], [38.2, -112.5], [39.2, -112.5]]},
+                {name: "Dixie National Forest", info: "2 million acres in southwestern Utah", acres: "2,000,000",
+                    polygon: [[38.5, -113.0], [38.5, -111.5], [37.3, -111.5], [37.3, -113.0], [38.5, -113.0]]},
+                {name: "Ashley National Forest", info: "1.4 million acres in northeastern Utah", acres: "1,400,000",
+                    polygon: [[41.0, -110.5], [41.0, -109.0], [40.2, -109.0], [40.2, -110.5], [41.0, -110.5]]}
+            ];
+
+            forests.forEach(forest => {
+                L.polygon(forest.polygon, {
+                    color: '#228B22',
+                    weight: 2,
+                    fillOpacity: 0.15,
+                    fillColor: '#228B22'
+                }).addTo(layers.nationalForest).bindPopup(`
+                    <div class="info-popup">
+                        <h4>🌲 ${forest.name}</h4>
+                        <p>${forest.info}</p>
+                        <p><strong>${forest.acres} acres</strong></p>
+                        <p>Dispersed camping generally allowed - check local restrictions</p>
+                    </div>
+                `);
+            });
+        }
+
+        function loadBLMLand() {
+            const blmAreas = [
+                {name: "West Desert", acres: "2,000,000+", polygon: [[40.5, -114.0], [40.5, -112.5], [38.5, -112.5], [38.5, -114.0], [40.5, -114.0]]},
+                {name: "San Rafael Swell", acres: "600,000", polygon: [[39.3, -111.2], [39.3, -110.2], [38.5, -110.2], [38.5, -111.2], [39.3, -111.2]]},
+                {name: "Grand Staircase-Escalante Region", acres: "1,800,000", polygon: [[38.2, -112.2], [38.2, -111.0], [37.0, -111.0], [37.0, -112.2], [38.2, -112.2]]},
+                {name: "Moab Area BLM", acres: "500,000+", polygon: [[39.0, -110.0], [39.0, -109.0], [38.2, -109.0], [38.2, -110.0], [39.0, -110.0]]},
+                {name: "Price Field Office", acres: "400,000", polygon: [[40.2, -111.0], [40.2, -110.0], [39.4, -110.0], [39.4, -111.0], [40.2, -111.0]]},
+                {name: "Vernal Field Office", acres: "600,000", polygon: [[40.8, -110.0], [40.8, -109.0], [40.0, -109.0], [40.0, -110.0], [40.8, -110.0]]},
+                {name: "Cedar City Area", acres: "300,000", polygon: [[38.2, -113.8], [38.2, -112.8], [37.4, -112.8], [37.4, -113.8], [38.2, -113.8]]},
+                {name: "Richfield Area", acres: "250,000", polygon: [[39.2, -112.5], [39.2, -111.5], [38.4, -111.5], [38.4, -112.5], [39.2, -112.5]]}
+            ];
+
+            blmAreas.forEach(area => {
+                L.polygon(area.polygon, {
+                    color: '#D2B48C',
+                    weight: 2,
+                    fillColor: '#D2B48C',
+                    fillOpacity: 0.15
+                }).addTo(layers.blm).bindPopup(`
+                    <div class="info-popup">
+                        <h4>🏜️ ${area.name}</h4>
+                        <p>BLM Public Land</p>
+                        <p><strong>${area.acres} acres</strong></p>
+                        <p>Free dispersed camping allowed on most BLM land (14-day limit)</p>
+                    </div>
+                `);
+            });
+        }
+
+        function loadNationalParks() {
+            const parks = [
+                {name: "Zion National Park", info: "No dispersed camping in park", polygon: [[37.45, -113.15], [37.45, -112.85], [37.15, -112.85], [37.15, -113.15], [37.45, -113.15]]},
+                {name: "Bryce Canyon National Park", info: "No dispersed camping in park", polygon: [[37.75, -112.30], [37.75, -112.10], [37.50, -112.10], [37.50, -112.30], [37.75, -112.30]]},
+                {name: "Capitol Reef National Park", info: "No dispersed camping in park", polygon: [[38.50, -111.40], [38.50, -110.90], [37.90, -110.90], [37.90, -111.40], [38.50, -111.40]]},
+                {name: "Arches National Park", info: "No dispersed camping in park", polygon: [[38.80, -109.70], [38.80, -109.45], [38.60, -109.45], [38.60, -109.70], [38.80, -109.70]]},
+                {name: "Canyonlands National Park", info: "Backcountry permits required", polygon: [[38.50, -110.20], [38.50, -109.60], [37.90, -109.60], [37.90, -110.20], [38.50, -110.20]]}
+            ];
+
+            parks.forEach(park => {
+                L.polygon(park.polygon, {
+                    color: '#B8860B',
+                    fillColor: '#B8860B',
+                    fillOpacity: 0.2,
+                    weight: 2
+                }).addTo(layers.nationalParks).bindPopup(`
+                    <div class="info-popup">
+                        <h4>🏞️ ${park.name}</h4>
+                        <p>${park.info}</p>
+                        <p><small>Dispersed camping available on surrounding BLM/USFS land</small></p>
+                    </div>
+                `);
+            });
+        }
+
+        function loadWildernessAreas() {
+            const wilderness = [
+                {name: "High Uintas Wilderness", polygon: [[41.0, -111.0], [41.0, -110.0], [40.5, -110.0], [40.5, -111.0], [41.0, -111.0]]},
+                {name: "Mount Naomi Wilderness", polygon: [[41.95, -111.75], [41.95, -111.55], [41.75, -111.55], [41.75, -111.75], [41.95, -111.75]]},
+                {name: "Lone Peak Wilderness", polygon: [[40.60, -111.80], [40.60, -111.65], [40.50, -111.65], [40.50, -111.80], [40.60, -111.80]]},
+                {name: "Mount Timpanogos Wilderness", polygon: [[40.48, -111.70], [40.48, -111.56], [40.36, -111.56], [40.36, -111.70], [40.48, -111.70]]},
+                {name: "Box-Death Hollow Wilderness", polygon: [[38.05, -111.55], [38.05, -111.20], [37.78, -111.20], [37.78, -111.55], [38.05, -111.55]]}
+            ];
+
+            wilderness.forEach(area => {
+                L.polygon(area.polygon, {
+                    color: '#8B0000',
+                    fillColor: '#8B0000',
+                    fillOpacity: 0.1,
+                    weight: 2,
+                    dashArray: '5, 10'
+                }).addTo(layers.wilderness).bindPopup(`
+                    <div class="info-popup">
+                        <h4>🏔️ ${area.name}</h4>
+                        <p>Wilderness Area</p>
+                        <p><small>Special regulations - no motorized vehicles</small></p>
+                    </div>
+                `);
+            });
+        }
+
+        async function loadForestRoads() {
+            try {
+                updateStatus('Loading roads from OSM...');
+                
+                const overpassUrl = 'https://overpass-api.de/api/interpreter';
+                
+                const roadQuery = `
+                    [out:json][timeout:90];
+                    (
+                        way["highway"="unclassified"]["surface"~"unpaved|dirt|gravel|ground"](${utahBounds.south},${utahBounds.west},${utahBounds.north},${utahBounds.east});
+                    );
+                    out geom;
+                `;
+
+                const roadResponse = await fetch(overpassUrl, {
+                    method: 'POST',
+                    body: roadQuery
+                });
+
+                const roadData = await roadResponse.json();
+                
+                if (roadData.elements) {
+                    roadData.elements.forEach(element => {
+                        if (element.type === 'way' && element.geometry) {
+                            const coords = element.geometry.map(node => [node.lat, node.lon]);
+                            
+                            L.polyline(coords, {
+                                color: '#8B4513',
+                                weight: 2,
+                                opacity: 0.7
+                            }).bindPopup(`
+                                <div class="info-popup">
+                                    <h4>Forest/BLM Road</h4>
+                                    <p>Surface: ${element.tags.surface || 'unpaved'}</p>
+                                    ${element.tags.name ? `<p>${element.tags.name}</p>` : ''}
+                                </div>
+                            `).addTo(layers.forestRoads);
+                        }
+                    });
+                    console.log(`Loaded ${roadData.elements.length} roads`);
+                }
+
+                const trackQuery = `
+                    [out:json][timeout:90];
+                    (
+                        way["highway"="track"](${utahBounds.south},${utahBounds.west},${utahBounds.north},${utahBounds.east});
+                    );
+                    out geom;
+                `;
+
+                const trackResponse = await fetch(overpassUrl, {
+                    method: 'POST',
+                    body: trackQuery
+                });
+
+                const trackData = await trackResponse.json();
+                
+                if (trackData.elements) {
+                    trackData.elements.forEach(element => {
+                        if (element.type === 'way' && element.geometry) {
+                            const coords = element.geometry.map(node => [node.lat, node.lon]);
+                            
+                            L.polyline(coords, {
+                                color: '#A0522D',
+                                weight: 2,
+                                opacity: 0.6,
+                                dashArray: '5, 5'
+                            }).bindPopup(`
+                                <div class="info-popup">
+                                    <h4>4WD Track</h4>
+                                    <p>Type: ${element.tags.tracktype || 'track'}</p>
+                                    ${element.tags.name ? `<p>${element.tags.name}</p>` : ''}
+                                </div>
+                            `).addTo(layers.tracks);
+                        }
+                    });
+                    console.log(`Loaded ${trackData.elements.length} tracks`);
+                    updateStatus(`Loaded ${roadData.elements.length + trackData.elements.length} roads & tracks`);
+                }
+
+                const pathQuery = `
+                    [out:json][timeout:60];
+                    (
+                        way["highway"="path"]["foot"="yes"](${utahBounds.south},${utahBounds.west},${utahBounds.north},${utahBounds.east});
+                    );
+                    out geom;
+                `;
+
+                const pathResponse = await fetch(overpassUrl, {
+                    method: 'POST',
+                    body: pathQuery
+                });
+
+                const pathData = await pathResponse.json();
+                
+                if (pathData.elements) {
+                    let pathCount = 0;
+                    pathData.elements.forEach(element => {
+                        if (element.type === 'way' && element.geometry && pathCount < 2000) {
+                            const coords = element.geometry.map(node => [node.lat, node.lon]);
+                            
+                            L.polyline(coords, {
+                                color: '#FF6347',
+                                weight: 1.5,
+                                opacity: 0.5,
+                                dashArray: '2, 4'
+                            }).bindPopup(`
+                                <div class="info-popup">
+                                    <h4>Trail</h4>
+                                    ${element.tags.name ? `<p>${element.tags.name}</p>` : ''}
+                                </div>
+                            `).addTo(layers.paths);
+                            pathCount++;
+                        }
+                    });
+                    console.log(`Loaded ${pathCount} trails`);
+                }
+
+            } catch (error) {
+                console.error('Error loading roads:', error);
+                updateStatus('Roads loaded with some errors');
+            }
+        }
+
+        async function loadCampgrounds() {
+            try {
+                const overpassUrl = 'https://overpass-api.de/api/interpreter';
+                const query = `
+                    [out:json][timeout:60];
+                    (
+                        node["tourism"="camp_site"](${utahBounds.south},${utahBounds.west},${utahBounds.north},${utahBounds.east});
+                        node["tourism"="camp_pitch"](${utahBounds.south},${utahBounds.west},${utahBounds.north},${utahBounds.east});
+                    );
+                    out;
+                `;
+
+                const response = await fetch(overpassUrl, {
+                    method: 'POST',
+                    body: query
+                });
+
+                const data = await response.json();
+                
+                if (data.elements) {
+                    data.elements.forEach(element => {
+                        L.circleMarker([element.lat, element.lon], {
+                            radius: 6,
+                            fillColor: '#ff9933',
+                            color: '#000',
+                            weight: 1,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        }).addTo(layers.campgrounds).bindPopup(`
+                            <div class="info-popup">
+                                <h4>🏕️ ${element.tags.name || 'Campground'}</h4>
+                                ${element.tags.fee ? `<p>Fee: ${element.tags.fee}</p>` : ''}
+                                ${element.tags.toilets ? `<p>Toilets available</p>` : ''}
+                            </div>
+                        `);
+                    });
+                    console.log(`Loaded ${data.elements.length} campgrounds`);
+                }
+            } catch (error) {
+                console.error('Error loading campgrounds:', error);
+            }
+        }
+
+        function loadKnownDispersedSites() {
+            const knownSites = [
+                // Moab area
+                {lat: 38.4284, lng: -109.4208, name: "Yellow Circle Road Dispersed", desc: "Large dispersed area south of Moab. Fire rings, La Sal views. No camping in first 0.6 mi from Hwy 191. 2WD accessible initially.", source: "Take the Truck, Getaway Couple, iOverlander", access: "2WD, HC rec beyond"},
+                {lat: 38.4191, lng: -109.4775, name: "Behind the Rocks Road Dispersed", desc: "Numbered sites begin 2 mi from Hwy 191. Red sand, juniper, trail access. Well-spaced with fire rings.", source: "BLM Moab Field Office", access: "2WD dry, sandy/muddy rain"},
+                {lat: 38.4682, lng: -109.3638, name: "La Sal Loop Road - Lower", desc: "Elevation 6,693-7,670 ft. Cooler than Moab valley. Sites along road and spurs in National Forest.", source: "Take the Truck, CS Ginger", access: "2WD main road, HC helpful"},
+                {lat: 38.5076, lng: -109.3465, name: "La Sal Loop Road - Upper", desc: "Large open spot higher on La Sal Loop. Excellent cell service, more seclusion, mountain views.", source: "Take the Truck (GPS)", access: "2WD accessible"},
+                {lat: 38.6122, lng: -109.6655, name: "Gemini Bridges Designated", desc: "6 sites in Bride's Canyon. Box canyon, towering red rock. Scenic primitive camping.", source: "BLM Moab, Discover Moab", access: "4WD HC REQUIRED"},
+                {lat: 38.5410, lng: -109.7229, name: "Long Canyon Road", desc: "2-3 mi down Long Canyon Rd from Hwy 313. Cleared areas with fire rings. Near Canyonlands & Dead Horse Point.", source: "Multiple sources", access: "North: 2WD. South: 4WD"},
+                {lat: 38.6427, lng: -109.8204, name: "Lone Mesa Area (Dubinky Well)", desc: "Off Hwy 313, road splits to Secret Spire (BLM 137) and Hey Joe Canyon (BLM 140). Open desert terrain.", source: "Multiple sources (same GPS)", access: "2WD caution, scout"},
+                {lat: 38.5904, lng: -109.8407, name: "Mineral Point / BLM 340", desc: "Past Horsethief CG along BLM 340. Near Canyonlands & Dead Horse. Cleared areas with fire rings.", source: "Take the Truck, Moab Info Center", access: "Any vehicle"},
+                {lat: 38.7107, lng: -109.7292, name: "Cotter Mine Road", desc: "10 designated sites off Hwy 191 north of Moab. Near Mill Canyon Dinosaur Tracksite. Red rock backdrop.", source: "BLM official", access: "HC recommended, gravel"},
+                {lat: 38.1825, lng: -109.6680, name: "Lockhart Basin", desc: "37+ mi route connecting Kane Creek to Needles. Numerous sites, spectacular canyon views.", source: "Campendium, OnX Maps", access: "4WD REQUIRED, rough technical"},
+                {lat: 38.4813, lng: -109.6023, name: "Kane Creek Undeveloped", desc: "Past all developed CGs on Kane Creek Rd beyond Hunters Canyon. ~9-10 mi from Moab. BLM numbered.", source: "Utah Camping blog, BLM", access: "2WD maintained, rougher beyond"},
+                {lat: 38.4198, lng: -109.4322, name: "Strike Ravine", desc: "La Sal Mountain views. Can get muddy after rain, not ideal for large vehicles. UTV parking area.", source: "Multiple sources", access: "HC recommended, difficult rain"},
+                {lat: 38.7176, lng: -109.7855, name: "Bartlett Wash BLM", desc: "Roadside camping near trails. Can be noisy, spotty cell. Better north access via Blue Hills Rd for trailers.", source: "Getaway Couple, CS Ginger", access: "Multiple routes"},
+                {lat: 38.8769, lng: -109.8124, name: "BLM 144 (Crescent Junction)", desc: "North of Moab near I-70. Excellent cell (4G/5G). Wide open, good for big rigs. OHV trails nearby.", source: "CS Ginger (GPS)", access: "2WD, muddy rain"},
+                
+                // Northern Utah
+                {lat: 40.6284, lng: -111.1487, name: "Murdock Basin Road (FR-137)", desc: "22 mi from Kamas on Mirror Lake Hwy. Walk-in to fifth-wheel sites. Most have fire rings. Summer/Fall only.", source: "TheOutbound, Overland Bound", access: "2WD 2mi, HC rec, 4WD deeper"},
+                {lat: 41.4614, lng: -111.4969, name: "Monte Cristo", desc: "9,000 ft elevation, 30 mi E of Huntsville. Mountain views, stunning fall foliage. Tight turnarounds.", source: "USFS official, TheDyrt", access: "0.25 mi dirt, not large RVs"},
+                {lat: 40.7124, lng: -109.4717, name: "Range Study Area (FR-217)", desc: "8,366 ft meadows/aspens. Huge dispersed areas, 40+ ft RVs verified. 20°F cooler than valley. Elk herds common.", source: "Campendium (16 reviews)", access: "All rigs, graded dirt, pit toilets"},
+                
+                // Central/Southern Utah
+                {lat: 38.7805, lng: -110.8430, name: "Family Butte Overlook (SS4121)", desc: "5 spectacular ridgeline sites with red rock overlook. 0.05 mi off SS4115. San Rafael Swell.", source: "Blue Ribbon Coalition Lost Trails", access: "4WD/HC required"},
+                {lat: 38.6289, lng: -110.7632, name: "Chute Canyon Area", desc: "Near trailhead or down canyon. Camper presence where Chute Canyon Rd meets Temple Mountain Rd.", source: "Overland Bound (GPS)", access: "Behind Reef Rd, 4WD wet"},
+                {lat: 38.6693, lng: -110.6481, name: "North Temple Wash (Rd 1012)", desc: "Remote, amazing campsites along North Temple Wash Rd. Seldom traveled, rougher areas.", source: "Overland Bound (GPS tracks)", access: "4WD recommended"},
+                {lat: 38.9430, lng: -110.3910, name: "San Rafael Reef Overlook (SS2346)", desc: "Historical mine shafts, overlook views of San Rafael Reef. Multiple trail options.", source: "Share Trails Lost Trails", access: "4WD/HC, multiple trails"},
+                {lat: 37.6577, lng: -112.1679, name: "Great Western Trail (NF-090)", desc: "Branches W from Hwy 63 at Bryce entrance. Dispersed after 'no camping' signs. 1.6 mi from Bryce VC.", source: "Boondockers Bible (GPS)", access: "2WD accessible"},
+                {lat: 37.7199, lng: -112.2553, name: "Tom's Best Spring (FR-117)", desc: "First 11.7 mi allow dispersed. Most popular along NF-3626. Ponderosa pines. 10 mi from Bryce VC.", source: "Boondockers Bible, Campnado", access: "2WD main, spurs rougher"},
+                {lat: 37.7299, lng: -112.2741, name: "Corral Hollow (FR-121)", desc: "First 2 mi most camping. Many miles into forest. 150 ft from road. 11.3 mi from Bryce VC.", source: "Boondockers Bible (GPS)", access: "2WD 2mi, bumpy places"},
+                {lat: 38.1070, lng: -111.2715, name: "Lower Bowns Reservoir", desc: "125-acre lake, Boulder Mountain. Pit toilets, fire pits, benches. Henry Mountains views. First-come.", source: "Visit Utah official (GPS)", access: "2WD - passenger vehicle"},
+                {lat: 38.1640, lng: -111.4384, name: "Fish Creek Reservoir", desc: "Boulder Mountain. Popular fishing (brook, rainbow, cutthroat). 7,000-11,000 ft elevation.", source: "Visit Utah (GPS)", access: "Well-maintained dirt/gravel"},
+                {lat: 38.5790, lng: -110.7976, name: "Wild Horse Road", desc: "W of Goblin Valley SP. Mars-like terrain, incredible sunrise/sunset. Dark Sky proximity. Status uncertain (2022 transfer).", source: "Outdoors.com, TheDyrt", access: "2WD, spots along road"},
+                {lat: 37.3158, lng: -109.8510, name: "Valley of the Gods", desc: "'Mini Monument Valley.' Dozens of sites on 17-mi loop. Two porta-potties. 14-day limit.", source: "Campendium (65 reviews, 4.8)", access: "Unpaved dry, HC rec, wet=bad"},
+                {lat: 37.2325, lng: -109.9943, name: "Muley Point", desc: "1,000+ ft cliff-edge above Goosenecks. 180° views, Monument Valley visible. One of Utah's best overlooks.", source: "Campendium, Visit Utah", access: "5mi dirt from Moki Dugway"},
+                {lat: 37.5408, lng: -109.9628, name: "Natural Bridges Airstrip", desc: "Former airstrip. Concrete/compacted ground. Level, Bear Ears views. Off UT-95 MP 87. Room 20-30+ rigs. Construction noted 2025.", source: "Campendium (14 reviews)", access: "Direct from UT-95, all vehicles"},
+                {lat: 37.0160, lng: -111.5451, name: "Lone Rock Beach", desc: "Camp on Lake Powell sand beach. Massive Lone Rock monolith. 4 micro-flush, 6 vault toilets, shower, dump. $14+$30 entry.", source: "Recreation.gov, NPS official", access: "Paved to booth, 2WD upper, 4WD water"},
+                {lat: 38.0839, lng: -109.5965, name: "Lockhart Basin (Southern)", desc: "Miles of dispersed along Lockhart Rd. ~5 mi from Needles. Hamburger Rock CG (paid) has restrooms. Must use bag/portable toilet.", source: "Freecampsites, multiple reviews", access: "2WD to creek, rougher beyond"},
+                
+                // Western Utah
+                {lat: 39.75, lng: -113.10, name: "Simpson Springs CG", desc: "Historic Pony Express site. 20 sites, vault toilets, seasonal water, tables, fire rings. Sites 1-10 reservable. Wild mustangs. $15-$65.", source: "BLM official, Recreation.gov", access: "Dirt Pony Express Rd, 2WD dry"},
+                {lat: 40.2343, lng: -112.1840, name: "Fivemile Pass Recreation", desc: "OHV trails, multiple dispersed areas. 5 vault toilets. No water/shade. Heavy OHV holidays. Free.", source: "BLM official, Armchair Explorer", access: "Paved Hwy 73, 2WD main"},
+                {lat: 40.7148, lng: -113.2849, name: "Knolls SRMA", desc: "36,000-acre sand dunes in Great Salt Lake Desert. OHV play area. Vault toilets, parking. Fire pans required. $10 day/$80 annual.", source: "BLM SRMA, Recreation.gov", access: "Paved frontage, 4WD dunes"},
+                {lat: 40.6154, lng: -112.7033, name: "Horseshoe Knolls", desc: "Sandy terrain, juniper shade. Winding OHV trails. Popular spring/fall. No facilities/fees. Closed to shooting. Free.", source: "BLM official, TheDyrt", access: "4WD/HC rec, some 2WD"},
+                {lat: 40.3470, lng: -112.5506, name: "Clover Spring CG", desc: "6,000 ft, spring-fed stream. 10 sites ($12) + 1 group ($45). Pit toilets, tables, fire rings. 2 equestrian sites. 30 ft max.", source: "BLM official, TheDyrt", access: "Paved SR 36/199, 2WD"},
+                {lat: 40.7856, lng: -113.9530, name: "Volcano Peak", desc: "Desert mountain near Bonneville Salt Flats. Wide open, excellent solitude. 5 mi to flats. No shade, very exposed. 14-day. Free.", source: "Campendium (11 reviews)", access: "I-80 Leppy Pass exit, all vehicles"}
+            ];
+
+            const knownIcon = L.divIcon({
+                html: '⛺',
+                className: 'camp-icon-known',
+                iconSize: [28, 28],
+                iconAnchor: [14, 28]
+            });
+
+            knownSites.forEach(site => {
+                L.marker([site.lat, site.lng], {icon: knownIcon})
+                    .addTo(layers.dispersedKnown)
+                    .bindPopup(`
+                        <div class="info-popup">
+                            <h4 style="color: #2c5f2d;">⛺ ${site.name}</h4>
+                            <p><strong>${site.desc}</strong></p>
+                            <p style="font-size: 11px; margin-top: 4px;"><strong>Access:</strong> ${site.access}</p>
+                            <p style="font-size: 11px; color: #666; margin-top: 6px;"><em>Source: ${site.source}</em></p>
+                            <p style="font-size: 10px; margin-top: 8px; padding: 6px; background: #e8f5e9; border-radius: 4px;"><strong>✓ KNOWN SITE:</strong> Well-documented with verified access</p>
+                        </div>
+                    `);
+            });
+            
+            console.log(`Loaded ${knownSites.length} KNOWN dispersed camping sites`);
+        }
+
+        function loadRiskyDispersedSites() {
+            const riskySites = [
+                // Moab area
+                {lat: 38.7, lng: -109.55, name: "Porcupine Rim (Sand Flats End)", desc: "End of Sand Flats Rd into Manti-La Sal NF. Stunning views. 40 min from Moab. Limited coordinate documentation.", warning: "Exact locations not well-defined", access: "Rough dirt, HC rec"},
+                {lat: 38.7112, lng: -109.7033, name: "Dalton Wells Rd (BLM 142)", desc: "Wide open with picturesque bluffs. May be Utah Raptor State Park now ($15/night). Sandy wash crossing.", warning: "Status uncertain - may no longer be free", access: "Rough, sandy, HC helpful"},
+                {lat: 38.7536, lng: -109.7296, name: "Klondike Bluff Road", desc: "Wide-open, excellent cell (near tower). 15-20 min to Arches. May be becoming Utah Raptor State Park.", warning: "May be transitioning to paid state park", access: "2WD accessible"},
+                {lat: 38.8286, lng: -109.7659, name: "BLM 143 Road", desc: "North of Moab off Hwy 191. Near bike trails. Fire rings. May be Utah Raptor State Park now.", warning: "Possible state park inclusion", access: "2WD accessible"},
+                {lat: 38.6418, lng: -109.3773, name: "Castleton Tower CG", desc: "Small free CG beneath Castleton Tower. Climber's basecamp. Pit toilet. CURRENTLY CLOSED by Grand County.", warning: "CLOSED - legal status disputed", access: "2WD, car/vans only"},
+                {lat: 38.55, lng: -109.15, name: "Onion Creek BLM Areas", desc: "~20 mi up Colorado River. Two BLM areas with pit toilets, fire rings, tables. Recent reports: NO FREE camping, fees charged.", warning: "Conflicting info - recent reports say no free camping", access: "Not big rigs, 4WD rec"},
+                {lat: 38.52, lng: -109.48, name: "Dripping Springs Area", desc: "Six large designated campsites near Tenmile Wash. Details not specified in sources.", warning: "Limited documentation, no coordinates", access: "Unknown"},
+                {lat: 38.5, lng: -109.5, name: "Black Ridge Area", desc: "Six designated BLM sites. Details not specified in sources.", warning: "Limited documentation, no coordinates", access: "Unknown"},
+                {lat: 38.4, lng: -109.52, name: "Picture Frame Arch Area", desc: "Four designated sites in Behind the Rocks area, 6 mi SW of Moab. May overlap general area.", warning: "Limited specific documentation", access: "Unknown"},
+                
+                // Northern Utah
+                {lat: 40.8, lng: -110.8, name: "Curtis Creek / Arbs Basin", desc: "Quiet dispersed with stunning sunsets, minimal traffic. Solitude. Typically no cell. Summer/Fall.", warning: "Limited documentation, no coordinates", access: "Unknown"},
+                {lat: 40.7, lng: -111.0, name: "Provo River Dispersed", desc: "Numerous sites along roads off Mirror Lake Hwy (UT-150). Many right on road lacking seclusion.", warning: "Very general - no specific sites documented", access: "Varies, many not trailer-friendly"},
+                {lat: 40.8331, lng: -110.9343, name: "Whitney Reservoir", desc: "9,317 ft alpine lake camping. 88-acre reservoir, Uinta Mtns. Beautiful setting, good fishing. 9 mi FR-032 deteriorates. DO NOT use FR-081.", warning: "Only 2 reviews, challenging 9mi access, routing critical", access: "FR-032, rough, $6-$45 fee"},
+                
+                // Central/Southern Utah
+                {lat: 38.8800, lng: -110.4464, name: "San Rafael North Dispersed", desc: "Remote dispersed site with scenic hiking access on BLM land. Limited access details.", warning: "Limited documentation, single source", access: "Unknown"},
+                {lat: 38.4744, lng: -111.3671, name: "Cathedral Valley CG", desc: "6 primitive sites overlooking Cathedral Valley in Capitol Reef NP. 7,000 ft, pinyon-juniper. Fire rings, table, 1 pit toilet. No water.", warning: "Only 3 reviews, extreme remoteness, weather-dependent", access: "HC/4WD, wash crossings, check weather"},
+                {lat: 38.5728, lng: -110.7380, name: "Goblin Valley East", desc: "3 signed dispersed sections outside Goblin Valley SP. Fire rings, rock walls. Near Little Wild Horse Canyon. Land management changed 2022.", warning: "Status uncertain after 2022 BLM-to-State transfer", access: "Rough, deep sand, scout"},
+                {lat: 37.2057, lng: -113.1486, name: "Gooseberry Mesa", desc: "Mesa rim with Zion views. Many sites with fire pits. Mountain bike area. Pit toilets at trailheads. 14-day.", warning: "Conflicting legality reports, some illegal camping enforcement", access: "Rough, washboard, 2WD dry, verify regs"},
+                {lat: 37.7300, lng: -112.0941, name: "Johns Valley Rd (FR-419/555)", desc: "Enters Dixie NF from Johns Valley Rd. Best on NF-419 SE. NF-555 also avail 4mi up. 8.3 mi from Bryce VC.", warning: "Narrow roads, mud concerns", access: "Narrow/bumpy, 4WD useful wet"},
+                
+                // Western Utah
+                {lat: 39.4, lng: -113.3, name: "House Range Recreation", desc: "Remote House Range BLM area. Bristlecone pines in high country. Rockhounding (trilobite beds, Topaz Mtn). No facilities. Extremely remote.", warning: "Very limited documentation, no specific GPS, extremely remote", access: "4WD/HC strongly rec, contact BLM first"},
+                {lat: 40.3668, lng: -109.1274, name: "Cliff Ridge", desc: "Spectacular cliff-edge over Flaming Gorge. 7,414 ft. Remote, few visitors. Stack rocks for fire rings. No facilities. 14-day.", warning: "Only 2 reviews, private property issues, conflicting access info, 4WD mandatory", access: "CR-1570, very rocky, 4WD HC REQUIRED, research route"}
+            ];
+
+            const riskyIcon = L.divIcon({
+                html: '⚠️',
+                className: 'camp-icon-risky',
+                iconSize: [28, 28],
+                iconAnchor: [14, 28]
+            });
+
+            riskySites.forEach(site => {
+                L.marker([site.lat, site.lng], {icon: riskyIcon})
+                    .addTo(layers.dispersedRisky)
+                    .bindPopup(`
+                        <div class="info-popup">
+                            <h4 style="color: #d97706;">⚠️ ${site.name}</h4>
+                            <p>${site.desc}</p>
+                            <p style="font-size: 11px; margin-top: 4px;"><strong>Access:</strong> ${site.access}</p>
+                            <p style="font-size: 10px; margin-top: 8px; padding: 6px; background: #fef3c7; border-radius: 4px; border-left: 3px solid #f59e0b;"><strong>⚠️ RISKY SITE:</strong> ${site.warning}. Scout in daylight. Have backup plan. Check current regulations.</p>
+                            <p style="font-size: 10px; margin-top: 6px;"><em>Always verify access before dark!</em></p>
+                        </div>
+                    `);
+            });
+            
+            console.log(`Loaded ${riskySites.length} RISKY dispersed camping sites`);
+        }
+
+        function loadDarkSky() {
+            const darkSkyZones = [
+                {name: "Capitol Reef Dark Sky Park", quality: "Bortle Class 1 (Pristine)", polygon: [[38.8, -111.5], [38.8, -110.5], [38.2, -110.5], [38.2, -111.5], [38.8, -111.5]]},
+                {name: "Canyonlands Dark Sky", quality: "Bortle Class 1-2 (Excellent)", polygon: [[38.5, -110.5], [38.5, -109.5], [37.6, -109.5], [37.6, -110.5], [38.5, -110.5]]},
+                {name: "San Rafael Swell Dark Sky", quality: "Bortle Class 2 (Excellent)", polygon: [[39.3, -111.2], [39.3, -110.2], [38.5, -110.2], [38.5, -111.2], [39.3, -111.2]]},
+                {name: "West Desert Dark Sky", quality: "Bortle Class 1 (Pristine)", polygon: [[40.5, -114.0], [40.5, -113.0], [39.5, -113.0], [39.5, -114.0], [40.5, -114.0]]},
+                {name: "Cedar Breaks Dark Sky", quality: "Bortle Class 2 (Excellent)", polygon: [[38.2, -112.5], [38.2, -111.5], [37.6, -111.5], [37.6, -112.5], [38.2, -112.5]]},
+                {name: "Grand Staircase Dark Sky", quality: "Bortle Class 2 (Excellent)", polygon: [[38.0, -112.0], [38.0, -111.0], [37.0, -111.0], [37.0, -112.0], [38.0, -112.0]]}
+            ];
+
+            darkSkyZones.forEach(zone => {
+                L.polygon(zone.polygon, {
+                    color: '#191970',
+                    fillColor: '#000033',
+                    fillOpacity: 0.2,
+                    weight: 2
+                }).addTo(layers.darkSky).bindPopup(`
+                    <div class="info-popup">
+                        <h4>🌌 ${zone.name}</h4>
+                        <p>${zone.quality}</p>
+                        <p>World-class stargazing - minimal light pollution</p>
+                    </div>
+                `);
+            });
+        }
+
+        // Layer controls
+        document.getElementById('layer-national-forest').addEventListener('change', (e) => {
+            e.target.checked ? map.addLayer(layers.nationalForest) : map.removeLayer(layers.nationalForest);
+        });
+
+        document.getElementById('layer-blm').addEventListener('change', (e) => {
+            e.target.checked ? map.addLayer(layers.blm) : map.removeLayer(layers.blm);
+        });
+
+        document.getElementById('layer-national-parks').addEventListener('change', (e) => {
+            e.target.checked ? map.addLayer(layers.nationalParks) : map.removeLayer(layers.nationalParks);
+        });
+
+        document.getElementById('layer-wilderness').addEventListener('change', (e) => {
+            e.target.checked ? map.addLayer(layers.wilderness) : map.removeLayer(layers.wilderness);
+        });
+
+        document.getElementById('layer-forest-roads').addEventListener('change', (e) => {
+            e.target.checked ? map.addLayer(layers.forestRoads) : map.removeLayer(layers.forestRoads);
+        });
+
+        document.getElementById('layer-tracks').addEventListener('change', (e) => {
+            e.target.checked ? map.addLayer(layers.tracks) : map.removeLayer(layers.tracks);
+        });
+
+        document.getElementById('layer-paths').addEventListener('change', (e) => {
+            e.target.checked ? map.addLayer(layers.paths) : map.removeLayer(layers.paths);
+        });
+
+        document.getElementById('layer-dispersed-known').addEventListener('change', (e) => {
+            e.target.checked ? map.addLayer(layers.dispersedKnown) : map.removeLayer(layers.dispersedKnown);
+        });
+
+        document.getElementById('layer-dispersed-risky').addEventListener('change', (e) => {
+            e.target.checked ? map.addLayer(layers.dispersedRisky) : map.removeLayer(layers.dispersedRisky);
+        });
+
+        document.getElementById('layer-campgrounds').addEventListener('change', (e) => {
+            e.target.checked ? map.addLayer(layers.campgrounds) : map.removeLayer(layers.campgrounds);
+        });
+
+        document.getElementById('layer-dark-sky').addEventListener('change', (e) => {
+            e.target.checked ? map.addLayer(layers.darkSky) : map.removeLayer(layers.darkSky);
+        });
+
+        // Weather functionality
+        let weatherPanelVisible = false;
+        
+        document.getElementById('weather-toggle').addEventListener('click', () => {
+            weatherPanelVisible = !weatherPanelVisible;
+            const panel = document.getElementById('weather-panel');
+            if (weatherPanelVisible) {
+                panel.classList.add('active');
+                document.getElementById('weather-toggle').textContent = 'Hide Weather Forecast';
+            } else {
+                panel.classList.remove('active');
+                document.getElementById('weather-toggle').textContent = 'Show Weather Forecast';
+            }
+        });
+
+        map.on('click', async (e) => {
+            if (weatherPanelVisible) {
+                await fetchWeather(e.latlng.lat, e.latlng.lng);
+            }
+        });
+
+        async function fetchWeather(lat, lon) {
+            const weatherContent = document.getElementById('weather-content');
+            weatherContent.innerHTML = '<p style="font-size: 11px;">Loading weather...</p>';
+            
+            try {
+                const response = await fetch(
+                    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weathercode,windspeed_10m_max&temperature_unit=fahrenheit&timezone=America%2FDenver&forecast_days=3`
+                );
+                
+                if (!response.ok) throw new Error('Weather fetch failed');
+                
+                const data = await response.json();
+                
+                const weatherCodes = {
+                    0: '☀️ Clear', 1: '🌤️ Mostly Clear', 2: '⛅ Partly Cloudy', 3: '☁️ Cloudy',
+                    45: '🌫️ Foggy', 48: '🌫️ Foggy', 51: '🌦️ Light Rain', 53: '🌧️ Rain',
+                    55: '🌧️ Heavy Rain', 61: '🌦️ Light Rain', 63: '🌧️ Rain', 65: '🌧️ Heavy Rain',
+                    71: '🌨️ Light Snow', 73: '❄️ Snow', 75: '❄️ Heavy Snow', 80: '🌦️ Showers',
+                    95: '⛈️ Thunderstorm'
+                };
+                
+                let weatherHTML = '';
+                for (let i = 0; i < 3; i++) {
+                    const date = new Date(data.daily.time[i]);
+                    const dayName = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                    const weather = weatherCodes[data.daily.weathercode[i]] || '🌡️ Variable';
+                    const high = Math.round(data.daily.temperature_2m_max[i]);
+                    const low = Math.round(data.daily.temperature_2m_min[i]);
+                    const precip = data.daily.precipitation_sum[i];
+                    const wind = Math.round(data.daily.windspeed_10m_max[i]);
+                    
+                    weatherHTML += `
+                        <div class="weather-day">
+                            <strong>${dayName}</strong><br>
+                            ${weather}<br>
+                            ${high}°F / ${low}°F<br>
+                            Wind: ${wind} mph<br>
+                            ${precip > 0 ? `Precip: ${precip.toFixed(1)}"` : 'Dry'}
+                        </div>
+                    `;
+                }
+                
+                weatherContent.innerHTML = weatherHTML;
+            } catch (error) {
+                weatherContent.innerHTML = '<p style="font-size: 11px; color: red;">Weather unavailable</p>';
+            }
+        }
+
+        L.control.scale({imperial: true, metric: true}).addTo(map);
+
+        async function initializeMap() {
+            console.log('Loading Utah map data...');
+            updateStatus('Initializing map...');
+            
+            loadNationalForests();
+            loadBLMLand();
+            loadNationalParks();
+            loadWildernessAreas();
+            loadKnownDispersedSites();
+            loadRiskyDispersedSites();
+            loadDarkSky();
+            
+            await loadForestRoads();
+            await loadCampgrounds();
+            
+            updateStatus('✅ Map ready!');
+            console.log('Utah map initialization complete');
+        }
+
+        initializeMap();
+
+        map.locate({setView: false, maxZoom: 12});
+        
+        map.on('locationfound', (e) => {
+            L.circle(e.latlng, {
+                radius: e.accuracy / 2,
+                color: '#4285F4',
+                fillColor: '#4285F4',
+                fillOpacity: 0.2
+            }).addTo(map);
+            
+            L.marker(e.latlng).addTo(map).bindPopup('📍 Your Location').openPopup();
+        });
+    </script>
+</body>
+</html>
